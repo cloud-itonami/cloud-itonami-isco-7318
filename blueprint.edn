@@ -1,0 +1,10 @@
+{:itonami.blueprint/id "cloud-itonami-isco-7318"
+ :itonami.blueprint/name "Independent Textile & Leather Handicraft Practice"
+ :itonami.blueprint/isco-08 "7318"
+ :itonami.blueprint/domain :trades/textile-leather-handicraft
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:local-jobs :craft-livelihoods :worker-safety]
+ :itonami.blueprint/governor :textile-leather-handicraft-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :forms :audit-ledger :bpmn]
+ :itonami.blueprint/status :public-oss}
