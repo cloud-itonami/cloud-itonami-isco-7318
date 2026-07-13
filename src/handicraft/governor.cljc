@@ -1,0 +1,100 @@
+(ns handicraft.governor
+  "TextileLeatherHandicraftGovernor — the independent safety/
+  traceability layer named in this repository's README/
+  business-model.md, gating the robot-dispensed physical work
+  (cutting-table setup, finished-piece transport) an advisor may
+  propose. The governor never dispatches hardware itself. Modeled on
+  cloud-itonami-isco-4311's bookkeeping.governor. Craft twist: a
+  proposed craft step's material must be a REGISTERED key in the
+  order's material stock, and the proposed quantity is arithmetic
+  comparison against the registered on-hand stock; a proposed
+  delivery's delivered items must fully cover the order's registered
+  required-spec-items set — partial delivery is not delivery.
+
+  HARD invariants (:hard? true, ALWAYS :hold, never overridable):
+    1. client provenance — the organization must be registered.
+    2. no-actuation      — proposal :effect must be :propose (the
+                           governor never dispatches hardware; it only
+                           gates what the robot may execute).
+    3. order basis          — an approval must cite a REGISTERED
+                           order belonging to this client.
+    4. material basis + stock ceiling — for a craft step, the material
+                           must be a REGISTERED key in
+                           :material-stock, and the proposed quantity
+                           must not exceed the registered on-hand
+                           stock.
+    5. spec completeness    — for a delivery, the proposed
+                           delivered-items set must be a superset of
+                           the order's registered
+                           :required-spec-items set (no partial
+                           delivery).
+  ESCALATION invariants (:escalate? true, ALWAYS human sign-off per
+  business-model.md's Trust Controls — these are :high/
+  :safety-critical regardless of confidence):
+    6. :op :approve-sharp-equipment-operation (no sharp-equipment
+                           operation without the governor gate).
+    7. :op :approve-chemical-treatment (chemical leather-treatment
+                           application always requires human
+                           sign-off).
+    8. low confidence (< `confidence-floor`)."
+  (:require [clojure.set :as set]
+            [handicraft.store :as store]))
+
+(def confidence-floor 0.6)
+
+(def ^:private always-escalate-ops #{:approve-sharp-equipment-operation
+                                     :approve-chemical-treatment})
+
+(defn- hard-violations [{:keys [request proposal]} client-record o]
+  (let [{:keys [op material quantity delivered-items]} proposal
+        craft? (= :approve-craft-step op)
+        deliver? (= :approve-delivery op)
+        order-op? (or craft? deliver?)
+        stock (:material-stock o)]
+    (cond-> []
+      (nil? client-record)
+      (conj {:rule :no-client :detail "未登録 client"})
+
+      (not= :propose (:effect proposal))
+      (conj {:rule :no-actuation :detail "effect は :propose のみ許可（governor はハードウェアを直接起動しない）"})
+
+      (and order-op? (nil? o))
+      (conj {:rule :unknown-order :detail "未登録 order への承認は不可"})
+
+      (and order-op? o (not= (:client-id o) (:client-id request)))
+      (conj {:rule :order-wrong-client :detail "order が別 client のもの"})
+
+      (and craft? o material (not (contains? stock material)))
+      (conj {:rule :unknown-material :detail (str "未登録材料: " material "（材料の捏造禁止）")})
+
+      (and craft? o material (contains? stock material) (number? quantity)
+           (> quantity (get stock material)))
+      (conj {:rule :stock-exceeded
+             :detail (str "使用数量 " quantity " > 在庫 " (get stock material)
+                          "（存在しない材料は使用できない）")})
+
+      (and deliver? o
+           (not (set/superset? (set delivered-items) (:required-spec-items o))))
+      (conj {:rule :incomplete-delivery
+             :detail (str "未納品仕様項目 "
+                          (vec (set/difference (:required-spec-items o) (set delivered-items)))
+                          "（部分納品は納品ではない）")}))))
+
+(defn check
+  "Assess a proposal against `request`/`context`/`proposal` and a
+  `store` implementing `handicraft.store/Store`. Pure — never mutates
+  the store, never dispatches the robot."
+  [request context proposal store]
+  (let [client-record (store/client store (:client-id request))
+        o (some->> (:order-id proposal) (store/order store))
+        hard (hard-violations {:request request :proposal proposal}
+                              client-record o)
+        hard? (boolean (seq hard))
+        conf (or (:confidence proposal) 0.0)
+        low? (< conf confidence-floor)
+        always-risky? (contains? always-escalate-ops (:op proposal))]
+    {:ok? (and (not hard?) (not low?) (not always-risky?))
+     :violations hard
+     :confidence conf
+     :hard? hard?
+     :escalate? (and (not hard?) (or low? always-risky?))}))
