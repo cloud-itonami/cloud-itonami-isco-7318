@@ -2,6 +2,28 @@
 
 Open Occupation Blueprint for **ISCO-08 7318**: Handicraft Workers in Textile, Leather and Related Materials.
 
+**Maturity: `:implemented`** — CraftAdvisor ⊣
+TextileLeatherHandicraftGovernor as a langgraph StateGraph
+(`intake → advise → govern → decide → commit/hold`, human-approval
+interrupt), modeled on cloud-itonami-isco-4311's bookkeeping actor.
+17 tests / 33 assertions green. The governor never dispatches
+hardware — it only gates what the material-handling robot below may
+execute.
+
+The craft/delivery HARD invariants — basis, arithmetic and set
+coverage, not convenience:
+
+1. **Material basis + stock ceiling** — a craft step's material must
+   be a registered stock key, and the proposed quantity must not
+   exceed the registered on-hand stock.
+2. **Spec completeness** — a delivery's delivered-items set must be a
+   superset of the order's registered required-spec-items set (partial
+   delivery is not delivery).
+
+`:approve-sharp-equipment-operation` and `:approve-chemical-treatment`
+**always** escalate to human sign-off regardless of confidence, per
+this repo's Trust Controls (business-model.md).
+
 This repository designs a forkable OSS business for an independent textile/leather handicraft worker: a material-handling robot performs cutting-table setup and finished-piece transport under a governor-gated actor, so the practice keeps its own order and material records instead of renting a closed craft-business SaaS.
 
 ## Robotics premise

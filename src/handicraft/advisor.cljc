@@ -1,0 +1,62 @@
+(ns handicraft.advisor
+  "CraftAdvisor — the advisor named in this repository's README,
+  proposing an order operation (approve a craft step, approve a
+  delivery, approve sharp-equipment operation, approve chemical
+  treatment) from a client order, material spec and craft protocol.
+  Swappable mock/llm; the advisor ONLY proposes —
+  `handicraft.governor` checks the material/stock basis and delivery
+  completeness independently and always escalates sharp-equipment/
+  chemical-treatment decisions. Modeled on cloud-itonami-isco-4311's
+  advisor.
+
+  A proposal: {:op :approve-craft-step|:approve-delivery|:approve-sharp-equipment-operation|:approve-chemical-treatment
+               :effect :propose :order-id str :material str
+               :quantity number :delivered-items #{str} :stake kw
+               :confidence n :rationale str}")
+
+(defprotocol Advisor
+  (-advise [advisor store request] "request -> proposal map"))
+
+(defn- infer [_store {:keys [op stake order-id material quantity delivered-items] :as request}]
+  {:op op
+   :effect :propose
+   :order-id order-id
+   :material material
+   :quantity quantity
+   :delivered-items delivered-items
+   :stake (or stake :low)
+   :confidence (case (or stake :low) :high 0.7 :medium 0.85 :low 0.95)
+   :rationale (str "proposed " (name op) " for client " (:client-id request))})
+
+(defn mock-advisor []
+  (reify Advisor
+    (-advise [_ store request] (infer store request))))
+
+(def ^:private system-prompt
+  "You are a textile/leather handicraft advisor. Given a request,
+   propose an :op, the :order-id, :material, :quantity and
+   :delivered-items, an honest :confidence and a :stake. Never call an
+   unregistered-material craft step, an over-stock use, or a partial
+   delivery conforming — the governor checks all against the
+   registered order record. Sharp-equipment and chemical-treatment
+   decisions always require human sign-off regardless of confidence.")
+
+(defn- parse-proposal [content]
+  (try
+    (let [p (read-string content)]
+      (if (map? p)
+        (assoc p :effect :propose)
+        {:op :unknown :effect :propose :confidence 0.0 :stake :high
+         :rationale "unparseable LLM response"}))
+    (catch #?(:clj Exception :cljs js/Error) _
+      {:op :unknown :effect :propose :confidence 0.0 :stake :high
+       :rationale "LLM response parse failure"})))
+
+(defn llm-advisor
+  [chat-model model-generate-fn gen-opts]
+  (reify Advisor
+    (-advise [_ _store request]
+      (let [msgs [{:role :system :content system-prompt}
+                  {:role :user :content (str "operation request: " (pr-str request))}]
+            resp (model-generate-fn chat-model msgs gen-opts)]
+        (parse-proposal (:content resp))))))
