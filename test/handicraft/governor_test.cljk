@@ -1,5 +1,5 @@
 (ns handicraft.governor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [handicraft.store :as store]
             [handicraft.governor :as governor]))
 
