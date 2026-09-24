@@ -1,5 +1,5 @@
 (ns handicraft.actor-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [handicraft.actor :as actor]
             [handicraft.store :as store]))
 
