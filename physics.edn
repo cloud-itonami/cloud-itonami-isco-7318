@@ -1,0 +1,43 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:physics` runs it.
+;;
+;; README "Robotics premise": a material-handling robot performs cutting-table
+;; setup and finished-piece transport for handicraft workers in textile,
+;; leather and related materials (ISCO 7318). Its physical work: laying a
+;; rolled hide or bolt of cloth onto the cutting table, carrying finished
+;; pieces to the finishing/dispatch area, and the pull check of a stitched
+;; leather strap.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isco-7318"
+ :cases
+ [{:id :hide-onto-cutting-table
+   :kind :manipulator
+   :procedure "arm lifts a rolled leather hide or a bolt of cloth from the store rack onto the cutting table"
+   :params {:l1-m 0.55 :l2-m 0.45 :m1-kg 6.0 :m2-kg 4.5
+            :from [0.45 0.10] :to [0.80 0.35] :duration-s 3.0 :steps 500}
+   :sweep {:param :payload-kg :values [2.0 4.0 7.0 10.0 15.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 150.0 :basis "estimate: continuous shoulder torque of a 10 kg-payload class collaborative arm at ~1 m reach"}
+   :boundary {:lo 0.5 :hi 40.0}}
+  {:id :finished-pieces-to-dispatch
+   :kind :transport
+   :procedure "cart carries a tote of finished bags, garments or leather goods from the workbenches to dispatch"
+   :params {:mass-kg 40.0 :payload-kg 15.0 :v-max-mps 1.0 :a-max-mps2 0.5
+            :brake-decel-mps2 0.8 :drive-force-n 90.0 :crr 0.015
+            :cog-height-m 0.55 :support-half-length-m 0.25 :max-time-s 1200.0}
+   :sweep {:param :distance-m :values [10.0 20.0 35.0 50.0 70.0]}
+   :quantity :cycle-time-s
+   :limit {:max 45.0 :basis "estimate: one bench-to-dispatch leg inside the courier pick-up window"}
+   :boundary {:lo 5.0 :hi 150.0}}
+  {:id :leather-strap-pull
+   :kind :material
+   :procedure "pull check of a 25 mm x 3.5 mm vegetable-tanned leather strap (bag handle) past its working load"
+   :params {:length-m 0.10 :area-m2 8.75e-5 :youngs-modulus-pa 150.0e6
+            :yield-stress-pa 15.0e6 :hardening-pa 30.0e6 :density-kg-m3 950.0}
+   :sweep {:param :max-force-n :values [200.0 500.0 900.0 1300.0 1800.0]}
+   :quantity :final-strain
+   :limit {:max 0.10 :basis "estimate: a handle strap should not stretch more than 10 % under load; leather E 150 MPa and 'yield' 15 MPa are assumed, and a J2 bilinear model only roughly describes leather"}
+   :boundary {:lo 100.0 :hi 3000.0}}]}
